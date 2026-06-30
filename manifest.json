@@ -1,0 +1,12 @@
+{
+  "name": "Snip - AI 内容脱水",
+  "short_name": "Snip",
+  "description": "粘贴链接，AI 自动提炼重点并保存到 Notion",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    {"src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✂️</text></svg>", "sizes": "any", "type": "image/svg+xml"}
+  ]
+}

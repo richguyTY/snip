@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/api/analyze", "destination": "/api/analyze" },
+    { "source": "/api/notion", "destination": "/api/notion" }
+  ]
+}

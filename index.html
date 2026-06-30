@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Snip - AI 内容脱水</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✂️</text></svg>">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f172a; color: #e2e8f0; min-height: 100dvh; line-height: 1.6;
+    }
+    .container { max-width: 640px; margin: 0 auto; padding: 20px 16px; }
+    h1 { font-size: 1.6rem; text-align: center; margin-bottom: 4px; }
+    .sub { text-align: center; color: #64748b; font-size: 0.85rem; margin-bottom: 24px; }
+
+    .input-group { display: flex; gap: 8px; margin-bottom: 16px; }
+    input[type="url"] {
+      flex: 1; padding: 14px 16px; border-radius: 12px; border: 2px solid #1e293b;
+      background: #1e293b; color: #e2e8f0; font-size: 1rem; outline: none;
+      transition: border-color 0.2s;
+    }
+    input[type="url"]:focus { border-color: #6366f1; }
+    button {
+      background: #6366f1; color: white; border: none; border-radius: 12px;
+      padding: 14px 20px; font-size: 1rem; font-weight: 600; cursor: pointer;
+      transition: background 0.2s; white-space: nowrap;
+    }
+    button:hover { background: #4f46e5; }
+    button:disabled { background: #374151; cursor: not-allowed; }
+
+    .card {
+      background: #1e293b; border-radius: 16px; padding: 20px; margin-bottom: 16px;
+      border: 1px solid #334155;
+    }
+    .card h3 { font-size: 0.8rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
+    .summary { font-size: 1.1rem; font-weight: 600; margin-bottom: 12px; }
+    .points { list-style: none; padding: 0; }
+    .points li { padding: 6px 0; padding-left: 20px; position: relative; font-size: 0.95rem; color: #cbd5e1; }
+    .points li::before { content: '▸'; position: absolute; left: 0; color: #6366f1; }
+
+    .verdict {
+      display: inline-block; padding: 4px 12px; border-radius: 999px;
+      font-size: 0.8rem; font-weight: 600; margin-top: 12px;
+    }
+    .verdict.worth { background: #065f46; color: #6ee7b7; }
+    .verdict.skip  { background: #7f1d1d; color: #fca5a5; }
+    .verdict.ad    { background: #78350f; color: #fcd34d; }
+
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+    .actions button { padding: 10px 16px; font-size: 0.85rem; }
+    .btn-outline { background: transparent; border: 1px solid #475569; color: #cbd5e1; }
+    .btn-outline:hover { background: #1e293b; border-color: #6366f1; }
+
+    .loading { text-align: center; padding: 40px 0; display: none; }
+    .loading.show { display: block; }
+    .spinner {
+      width: 40px; height: 40px; border: 3px solid #334155;
+      border-top-color: #6366f1; border-radius: 50%;
+      animation: spin 0.8s linear infinite; margin: 0 auto 12px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .result { display: none; }
+    .result.show { display: block; }
+
+    .toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: #22c55e; color: white; padding: 10px 24px; border-radius: 999px;
+      font-size: 0.9rem; font-weight: 600; opacity: 0; transition: opacity 0.3s;
+      pointer-events: none; z-index: 100;
+    }
+    .toast.show { opacity: 1; }
+
+    #setup { display: none; }
+    #setup.show { display: block; }
+    .setup-hint { font-size: 0.8rem; color: #94a3b8; margin-top: 4px; }
+
+    .settings-toggle {
+      text-align: center; margin-top: 24px;
+    }
+    .settings-toggle a { color: #64748b; font-size: 0.8rem; text-decoration: none; }
+    .settings-toggle a:hover { color: #94a3b8; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>✂️ Snip</h1>
+    <p class="sub">AI 内容脱水 — 粘贴链接，自动提炼重点</p>
+
+    <div class="input-group">
+      <input type="url" id="urlInput" placeholder="粘贴 B站/公众号/知乎/小红书链接..." autocomplete="off">
+      <button id="analyzeBtn" onclick="analyze()">分析</button>
+    </div>
+
+    <div class="loading" id="loading">
+      <div class="spinner"></div>
+      <p>AI 分析中...</p>
+    </div>
+
+    <div class="result" id="result">
+      <div class="card">
+        <h3>📌 一句话总结</h3>
+        <p class="summary" id="summary"></p>
+
+        <h3>🔑 关键要点</h3>
+        <ul class="points" id="points"></ul>
+
+        <div id="verdictContainer"></div>
+      </div>
+
+      <div class="actions">
+        <button onclick="saveMarkdown()" class="btn-outline">📥 下载 Markdown</button>
+        <button onclick="copyText()" class="btn-outline">📋 复制全文</button>
+        <button onclick="saveToNotion()" class="btn-outline">📝 保存到 Notion</button>
+        <button onclick="shareNative()" class="btn-outline">📤 分享</button>
+      </div>
+    </div>
+
+    <div id="setup" class="card">
+      <h3>⚙️ Notion 设置（可选）</h3>
+      <p class="setup-hint">需要 Notion API Key + 数据库 ID 才能自动保存</p>
+      <input type="password" id="notionKey" placeholder="Notion API Key (secret_xxx)" style="width:100%;margin:8px 0;padding:10px;border-radius:8px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;font-size:0.85rem;">
+      <input type="text" id="notionDB" placeholder="Database ID" style="width:100%;margin-bottom:8px;padding:10px;border-radius:8px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;font-size:0.85rem;">
+      <button onclick="saveNotionConfig()" class="btn-outline" style="width:100%;">保存设置</button>
+    </div>
+
+    <div class="settings-toggle">
+      <a href="#" onclick="document.getElementById('setup').classList.toggle('show');return false;">⚙️ Notion 设置</a>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    let lastResult = null;
+
+    async function analyze() {
+      const url = document.getElementById('urlInput').value.trim();
+      if (!url) return;
+
+      document.getElementById('loading').classList.add('show');
+      document.getElementById('result').classList.remove('show');
+      document.getElementById('analyzeBtn').disabled = true;
+
+      try {
+        const res = await fetch('/api/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url })
+        });
+        const data = await res.json();
+
+        if (data.error) { showToast(data.error, true); return; }
+
+        lastResult = data;
+        document.getElementById('summary').textContent = data.summary;
+        document.getElementById('points').innerHTML = data.points.map(p => `<li>${p}</li>`).join('');
+
+        const vc = document.getElementById('verdictContainer');
+        if (data.verdict === 'worth') {
+          vc.innerHTML = '<span class="verdict worth">⭐ 值得保存</span>';
+        } else if (data.verdict === 'skip') {
+          vc.innerHTML = '<span class="verdict skip">⚠️ 标题党/无干货</span>';
+        } else if (data.verdict === 'ad') {
+          vc.innerHTML = '<span class="verdict ad">📢 广告/软文</span>';
+        }
+
+        document.getElementById('result').classList.add('show');
+      } catch (e) {
+        showToast('网络错误，请重试', true);
+      } finally {
+        document.getElementById('loading').classList.remove('show');
+        document.getElementById('analyzeBtn').disabled = false;
+      }
+    }
+
+    function saveMarkdown() {
+      if (!lastResult) return;
+      const md = `# ${lastResult.title || 'Snip 笔记'}\n\n**来源：** ${lastResult.url}\n\n**总结：** ${lastResult.summary}\n\n## 关键要点\n${lastResult.points.map(p => `- ${p}`).join('\n')}\n\n---\n*由 Snip 生成*`;
+      const blob = new Blob([md], { type: 'text/markdown' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'snip-' + Date.now() + '.md';
+      a.click();
+      showToast('已下载 Markdown');
+    }
+
+    function copyText() {
+      if (!lastResult) return;
+      const text = `${lastResult.summary}\n\n${lastResult.points.map(p => `• ${p}`).join('\n')}`;
+      navigator.clipboard.writeText(text).then(() => showToast('已复制到剪贴板'));
+    }
+
+    async function saveToNotion() {
+      if (!lastResult) return;
+      const key = localStorage.getItem('snip_notion_key');
+      const db  = localStorage.getItem('snip_notion_db');
+      if (!key || !db) {
+        document.getElementById('setup').classList.add('show');
+        showToast('请先设置 Notion API Key 和 Database ID', true);
+        return;
+      }
+      showToast('保存中...');
+      try {
+        const res = await fetch('/api/notion', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ notionKey: key, notionDB: db, data: lastResult })
+        });
+        const d = await res.json();
+        if (d.ok) showToast('已保存到 Notion');
+        else showToast('Notion 保存失败: ' + (d.error || 'unknown'), true);
+      } catch (e) {
+        showToast('Notion 请求失败', true);
+      }
+    }
+
+    function shareNative() {
+      if (!lastResult) return;
+      const text = `Snip 分析 | ${lastResult.summary}\n${lastResult.url}`;
+      if (navigator.share) {
+        navigator.share({ title: 'Snip', text });
+      } else {
+        navigator.clipboard.writeText(text).then(() => showToast('链接已复制，可粘贴分享'));
+      }
+    }
+
+    function saveNotionConfig() {
+      const key = document.getElementById('notionKey').value.trim();
+      const db  = document.getElementById('notionDB').value.trim();
+      localStorage.setItem('snip_notion_key', key);
+      localStorage.setItem('snip_notion_db', db);
+      showToast('Notion 设置已保存');
+    }
+
+    function showToast(msg, isError) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.style.background = isError ? '#ef4444' : '#22c55e';
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 2000);
+    }
+
+    // 监听回车
+    document.getElementById('urlInput').addEventListener('keydown', e => {
+      if (e.key === 'Enter') analyze();
+    });
+
+    // 初始化：加载 Notion 设置
+    (() => {
+      const key = localStorage.getItem('snip_notion_key');
+      const db  = localStorage.getItem('snip_notion_db');
+      if (key) document.getElementById('notionKey').value = key;
+      if (db)  document.getElementById('notionDB').value = db;
+    })();
+
+    // 注册 Service Worker
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js');
+    }
+  </script>
+</body>
+</html>
